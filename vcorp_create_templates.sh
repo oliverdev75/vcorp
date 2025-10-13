@@ -14,50 +14,52 @@ sysadmin_user="sysadmin"
 
 
 
-if grep -q microsoft /proc/version; then
-    # Estem en entorn WSL
-    echo "Configurant per entorn WSL"
-    vbox="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
-    default_vm_location="/mnt/c/VirtualCorp"
-    wsl_default_vm_location="C:\\VirtualCorp"
-    download_folder="/mnt/c/TEMP"
-    openwrt_vm_path="$default_vm_location/$vcorp_group/templates/"
+check_platform() {
 
-    wsl_download_folder="c:\\TEMP"
-    open_wrt_file_path="$wsl_download_folder\\$openwrt_file"
-
-    wsl_openwrt_vm_path="$wsl_default_vm_location\\$vcorp_group\\templates\\$openwrt_vmname"
-    vdi_path="$wsl_openwrt_vm_path\\openwrt.vdi"
-
-    # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
-    # vbox_templates_path="$vbox_vcorp_path/templates"
-    wsl_vbox_templates_path="$wsl_default_vm_location\\$vcorp_group\\templates"
-    old_protocol=''
-    ip_vm=172.20.224.1
-
-
-else
-    # Estem en entorn Linux natiu
-    echo "Configurant per entorn Linux natiu"
-    vbox="vboxmanage"
-    default_vm_location="$HOME/VirtualBox VMs"
-    wsl_default_vm_location="$HOME/VirtualBox VMs"
-    download_folder="$(mktemp -d)"
-    openwrt_vm_path="$default_vm_location/$vcorp_group/templates"
-
-    wsl_download_folder="$download_folder"
-    open_wrt_file_path="$wsl_download_folder/$openwrt_file"
-
-    wsl_openwrt_vm_path="$openwrt_vm_path/$openwrt_vmname"
-    vdi_path="$wsl_openwrt_vm_path/openwrt.vdi"
-
-    # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
-    # vbox_templates_path="$vbox_vcorp_path/templates"
-    wsl_vbox_templates_path="$openwrt_vm_path"
-    old_protocol='-O'
-    ip_vm=localhost
-
-fi
+    if grep -q microsoft /proc/version; then
+        # Estem en entorn WSL
+        echo "Configurant per entorn WSL..."
+        vbox="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
+        default_vm_location="/mnt/c/VirtualCorp"
+        wsl_default_vm_location="C:\\VirtualCorp"
+        download_folder="/mnt/c/TEMP"
+        openwrt_vm_path="$default_vm_location/$vcorp_group/templates/"
+    
+        wsl_download_folder="c:\\TEMP"
+        open_wrt_file_path="$wsl_download_folder\\$openwrt_file"
+    
+        wsl_openwrt_vm_path="$wsl_default_vm_location\\$vcorp_group\\templates\\$openwrt_vmname"
+        vdi_path="$wsl_openwrt_vm_path\\openwrt.vdi"
+    
+        # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
+        # vbox_templates_path="$vbox_vcorp_path/templates"
+        wsl_vbox_templates_path="$wsl_default_vm_location\\$vcorp_group\\templates"
+        old_protocol=''
+        ip_vm=172.20.224.1
+    
+    else
+    
+        # Estem en entorn Linux i MacOS
+        echo "Configurant per entorn Linux i MacOS..."
+        vbox="vboxmanage"
+        default_vm_location="$HOME/VirtualBox VMs"
+        wsl_default_vm_location="$HOME/VirtualBox VMs"
+        download_folder="$(mktemp -d)"
+        openwrt_vm_path="$default_vm_location/$vcorp_group/templates"
+    
+        wsl_download_folder="$download_folder"
+        open_wrt_file_path="$wsl_download_folder/$openwrt_file"
+    
+        wsl_openwrt_vm_path="$openwrt_vm_path/$openwrt_vmname"
+        vdi_path="$wsl_openwrt_vm_path/openwrt.vdi"
+    
+        # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
+        # vbox_templates_path="$vbox_vcorp_path/templates"
+        wsl_vbox_templates_path="$openwrt_vm_path"
+        old_protocol='-O'
+        ip_vm=localhost
+    fi
+}
 
 create_openwrtvdi() {
 
@@ -317,7 +319,7 @@ d-i apt-setup/cdrom/set-first boolean false
 #d-i apt-setup/security_host string security.debian.org
 
 ### Package selection
-tasksel tasksel/first multiselect $4
+tasksel tasksel/first multiselect $4uname
 
 # Copiar authorized_keys des del medi d'instal·lació (/cdrom) cap al sistema instal·lat (/target)
 d-i preseed/late_command string \
@@ -418,7 +420,7 @@ deb_create_vm() {
     "$vbox" createvm --name "$1" --ostype "Debian_64" --register --groups "/$vcorp_group/templates"
     "$vbox" modifyvm "$1" --memory 1024 --cpus 1
     "$vbox" modifyvm "$1"  --nic1 nat --natpf1 "ssh,tcp,,2222,,22"
-    "$vbox" createhd --filename "$wsl_vbox_templates_path/$1/$1.vdi" --size 20000
+    "$vbox" createhd --filename "$wsl_vbox_templates_path/$1/$1.vdi" --size 50000
     "$vbox" storagectl "$1" --name "SATA Controller" --add sata --controller IntelAhci --portcount 2
     "$vbox" storageattach "$1" --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "$wsl_vbox_templates_path/$1/$1.vdi"
     "$vbox" storagectl "$1" --name "IDE Controller" --add ide
@@ -589,7 +591,7 @@ done
 mkdir -p "$default_vm_location"
 "$vbox" setproperty machinefolder "$wsl_default_vm_location"
 
-test -v opc_help && show_help
+test -v opc_help && show_help || check_platform
 
 test -v opc_create_router && {
     echo "** Deleting $openwrt_vmname **"
