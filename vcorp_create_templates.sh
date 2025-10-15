@@ -8,7 +8,7 @@ openwrt_file=${openwrt_zipped_file%.gz}
 openwrt_vmname="openwrt_template"
 srv_template_vmname='debian_server_template'
 desktop_template_vmname='debian_desktop_template'
-idkeys_path="$(dirname "$0")/.ssh/vcorp_sysadmin"
+idkeys_path="$HOME/.ssh/vcorp_sysadmin"
 sysadmin_user="sysadmin"
 iso_dir="" #es una variable para la opción -i o --iso
 
