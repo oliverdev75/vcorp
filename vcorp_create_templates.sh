@@ -10,11 +10,15 @@ srv_template_vmname='debian_server_template'
 desktop_template_vmname='debian_desktop_template'
 idkeys_path="$(dirname "$0")/.ssh/vcorp_sysadmin"
 sysadmin_user="sysadmin"
+iso_dir="" #es una variable para la opción -i o --iso
 
-
-
+is_wsl=0
 
 if grep -q microsoft /proc/version; then
+    is_wsl=1
+fi
+
+if (( is_wsl )); then
     # Estem en entorn WSL
     echo "Configurant per entorn WSL"
     vbox="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
@@ -36,9 +40,10 @@ if grep -q microsoft /proc/version; then
     ip_vm=172.20.224.1
 
 
-else
-    # Estem en entorn Linux natiu
-    echo "Configurant per entorn Linux natiu"
+else 
+
+    # Estem en entorn MacOS o Linux natiu
+    echo "Configurant per entorn MacOS natiu"
     vbox="vboxmanage"
     default_vm_location="$HOME/VirtualBox VMs"
     wsl_default_vm_location="$HOME/VirtualBox VMs"
@@ -58,6 +63,20 @@ else
     ip_vm=localhost
 
 fi
+
+    # si el usuario pasa -i/--iso, usar esa carpeta
+    if [ -n "$iso_dir" ]; then # si la variable no esta vacía
+      if [ ! -d "$iso_dir" ]; then #
+        echo "La carpeta $iso_dir no existe. Creándola..."
+        mkdir -p "$iso_dir" || { echo "No se pudo crear $iso_dir"; exit 1; }
+      fi
+      download_folder="$iso_dir" #entonces usaremos esa carpeta
+    fi
+
+    ensure_dirs() {
+      mkdir -p "$default_vm_location"
+      "$vbox" setproperty machinefolder "$wsl_default_vm_location"
+    }
 
 create_openwrtvdi() {
 
@@ -380,6 +399,10 @@ EOF
 
 }
 
+
+
+
+
 deb_prepare_iso() {
     # $1 path to decompress debian iso
     wget -P "$download_folder" "$debian_url"
@@ -515,6 +538,7 @@ create_debian_desktop() {
 
 }
 
+
 show_help() {
     cat <<EOF
 Usage: $0 [OPTION]...
@@ -524,6 +548,8 @@ Opcions:
   -s, --create-server     Crea la màquina virtual del servidor Debian
   -d, --create-desktop    Crea la màquina virtual d'escriptori Debian
   -h, --help              Mostra aquest missatge d'ajuda
+  -i, --iso               Indica una carpeta local donde se encuentran las ISOs descargadas, sino se encuentra la ISO en la ruta por default, 
+                          se le pedirá que pase la ruta donde se encuentra la ISO
 
 Aquest script permet crear plantilles de màquines virtuals per a diverses configuracions:
   1. Router amb OpenWRT
@@ -556,42 +582,38 @@ if [ "$1" = "" ]; then
     eval set -- "-rsd"
 fi
 
-args=$(getopt -o rsdh \
-    --long create-router,create-server,help,create-desktop, --name "$0" -- "$@")
+args=$(getopt -o rsdhi \
+    --long create-router,create-server,help,create-desktop,iso,debian-url:,openwrt-url: --name "$0" -- "$@")
 
 eval set -- "${args}"
 
 while true; do
-    case "${1}" in
-    -h | --help)
-        opc_help=
-        shift
-        ;;
-    -r | --create-router)
-        opc_create_router=
-        shift
-        ;;
-    -s | --create-server)
-        opc_create_server=
-        shift
-        ;;
-    -d | --create-desktop)
-        opc_create_desktop=
-        shift
-        ;;
-    --)
-        shift
-        break
-        ;;
-    esac
+  case "$1" in
+    -h|--help)           
+    opc_help=1; shift ;;
+    -r|--create-router)  
+    opc_create_router=1; shift ;;
+    -s|--create-server)  
+    opc_create_server=1; shift ;;
+    -d|--create-desktop) 
+    opc_create_desktop=1; shift ;;
+    -i|--iso)            
+    iso_dir="$2"; shift 2 ;;
+    --debian-url)        
+    debian_url="$2"; shift 2 ;;
+    --openwrt-url)       
+    openwrt_url="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
 done
 
 mkdir -p "$default_vm_location"
 "$vbox" setproperty machinefolder "$wsl_default_vm_location"
 
-test -v opc_help && show_help
+test -n opc_help && show_help
 
-test -v opc_create_router && {
+test -n opc_create_router && {
     echo "** Deleting $openwrt_vmname **"
     "$vbox" unregistervm "$openwrt_vmname" --delete 2>/dev/null 
 
@@ -602,15 +624,14 @@ test -v opc_create_router && {
     configure_openwrt
 }
 
-
 # Comprovar si existeixen les variables opc_create_desktop o opc_create_server
-if [[ -v opc_create_desktop || -v opc_create_server ]]; then
+if [[ -n opc_create_desktop || -n opc_create_server ]]; then
     # Executar prepare_iso sempre
     tmp_folder=$(mktemp -d)
     deb_prepare_iso "$tmp_folder"
 
     # Si existeix opc_create_server, executa create_server
-    if [[ -v opc_create_server ]]; then
+    if [[ -n opc_create_server ]]; then
         echo ""
         echo "** Deleting $srv_template_vmname **"
         "$vbox" unregistervm "$srv_template_vmname" --delete 2>/dev/null
@@ -624,7 +645,7 @@ if [[ -v opc_create_desktop || -v opc_create_server ]]; then
     fi
 
     # Si existeix opc_create_desktop, executa create_desktop
-    if [[ -v opc_create_desktop ]]; then
+    if [[ -n opc_create_desktop ]]; then
         echo "** Deleting $desktop_template_vmname **"
         "$vbox" unregistervm "$desktop_template_vmname" --delete 2>/dev/null
 
