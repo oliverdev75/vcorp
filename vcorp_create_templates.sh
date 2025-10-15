@@ -2,6 +2,10 @@
 
 openwrt_url='https://mirror-03.infra.openwrt.org/releases/24.10.3/targets/x86/64/openwrt-24.10.3-x86-64-generic-ext4-combined.img.gz'
 debian_url='https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.1.0-amd64-netinst.iso'
+openwrt_vdi_filename=$(echo $openwrt_url | rev | cut -d'/' -f1 | rev)
+debian_iso_filename=$(echo $debian_iso_url | rev | cut -d'/' -f1 | rev)
+openwrt_vdi_checksum="cc621a8a8a2b780d3c8f47ce3ecb2ba59e4a0cff1ebeb8d096d7c7e0202799c7"
+debian_iso_checksum="658b28e209b578fe788ec5867deebae57b6aac5fce3692bbb116bab9c65568b3"
 vcorp_group="VCorp"
 openwrt_zipped_file=$(basename $openwrt_url)
 openwrt_file=${openwrt_zipped_file%.gz}
@@ -65,6 +69,11 @@ create_openwrtvdi() {
 
     rm -f "$download_folder/$openwrt_zipped_file"
     wget -P "$download_folder" $openwrt_url
+    if [[ $(sha256sum $openwrt_vdi_filename | cut -d' ' -f1) != $openwrt_vdi_checksum ]]
+    then
+        echo "Bad OpenWRT IMG!"
+        exit 1
+    fi
     gzip -fd "$download_folder/$openwrt_zipped_file"
 
     mkdir "$download_folder/openwrtmnt"
@@ -385,8 +394,13 @@ EOF
 deb_prepare_iso() {
     # $1 path to decompress debian iso
     wget -P "$download_folder" "$debian_url"
-    iso_image=$(basename "$debian_url")
-    bsdtar -xf "$download_folder/$iso_image" -C "$1"
+    if [[ $(sha256sum "$download_folder/$debian_iso_filename" | cut -d' ' -f1) == "$debian_iso_filename" ]]
+    then
+        iso_image=$(basename "$debian_url")
+        bsdtar -xf "$download_folder/$iso_image" -C "$1"
+    else
+        echo "Bad Debian ISO!"
+    fi
 }
 
 deb_create_preseeded_iso() {
@@ -544,14 +558,16 @@ EOF
 
 
 
-if which apt &> /dev/null; then
-    sudo apt-get install -y libarchive-tools mkisofs sshpass
-elif which pacman &> /dev/null; then
-    sudo pacman -Syu --noconfirm --needed libarchive cdrtools sshpass
-else
-    echo "Cal instal·lar libarchive-tools (o bsdtar en algunes distribucions) i mkisofs"
-    echo ""
-fi
+install_dependencies() {
+    if which apt &> /dev/null; then
+        sudo apt-get install -y libarchive-tools mkisofs sshpass
+    elif which pacman &> /dev/null; then
+        sudo pacman -Syu --noconfirm --needed libarchive cdrtools sshpass
+    else
+        echo "Cal instal·lar libarchive-tools (o bsdtar en algunes distribucions) i mkisofs"
+        echo ""
+    fi
+}
 
 
 if [ "$1" = "" ]; then
@@ -594,6 +610,7 @@ mkdir -p "$default_vm_location"
 test -v opc_help && show_help || check_platform
 
 test -v opc_create_router && {
+    install_dependencies
     echo "** Deleting $openwrt_vmname **"
     "$vbox" unregistervm "$openwrt_vmname" --delete 2>/dev/null 
 
@@ -607,6 +624,7 @@ test -v opc_create_router && {
 
 # Comprovar si existeixen les variables opc_create_desktop o opc_create_server
 if [[ -v opc_create_desktop || -v opc_create_server ]]; then
+    install_dependencies
     # Executar prepare_iso sempre
     tmp_folder=$(mktemp -d)
     deb_prepare_iso "$tmp_folder"
