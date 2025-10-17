@@ -2,11 +2,10 @@
 
 openwrt_url='https://mirror-03.infra.openwrt.org/releases/24.10.3/targets/x86/64/openwrt-24.10.3-x86-64-generic-ext4-combined.img.gz'
 debian_url='https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.1.0-amd64-netinst.iso'
-openwrt_vdi_filename=$(echo $openwrt_url | rev | cut -d'/' -f1 | rev)
-debian_iso_filename=$(echo $debian_iso_url | rev | cut -d'/' -f1 | rev)
 openwrt_vdi_checksum="cc621a8a8a2b780d3c8f47ce3ecb2ba59e4a0cff1ebeb8d096d7c7e0202799c7"
 debian_iso_checksum="658b28e209b578fe788ec5867deebae57b6aac5fce3692bbb116bab9c65568b3"
 vcorp_group="VCorp"
+debian_iso_filename=$(basename $debian_url)
 openwrt_zipped_file=$(basename $openwrt_url)
 openwrt_file=${openwrt_zipped_file%.gz}
 openwrt_vmname="openwrt_template"
@@ -14,15 +13,29 @@ srv_template_vmname='debian_server_template'
 desktop_template_vmname='debian_desktop_template'
 idkeys_path="$HOME/.ssh/vcorp_sysadmin"
 sysadmin_user="sysadmin"
-iso_dir="" #es una variable para la opción -i o --iso
-
-
+iso_dir=""
+is_wsl=0
+vbox=
+default_vm_location=
+wsl_default_vm_location=
+download_folder=
+openwrt_vm_path=
+wsl_download_folder=
+open_wrt_file_path=
+wsl_openwrt_vm_path=
+vdi_path=
+wsl_vbox_templates_path=
+old_protocol=
+ip_vm=
 
 
 check_platform() {
-is_wsl=0
 
     if grep -q microsoft /proc/version; then
+        is_wsl=1
+    fi
+
+    if (( is_wsl )); then
         # Estem en entorn WSL
         echo "Configurant per entorn WSL..."
         vbox="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
@@ -30,111 +43,64 @@ is_wsl=0
         wsl_default_vm_location="C:\\VirtualCorp"
         download_folder="/mnt/c/TEMP"
         openwrt_vm_path="$default_vm_location/$vcorp_group/templates/"
-    
+
         wsl_download_folder="c:\\TEMP"
         open_wrt_file_path="$wsl_download_folder\\$openwrt_file"
-    
+
         wsl_openwrt_vm_path="$wsl_default_vm_location\\$vcorp_group\\templates\\$openwrt_vmname"
         vdi_path="$wsl_openwrt_vm_path\\openwrt.vdi"
-    
+
         # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
         # vbox_templates_path="$vbox_vcorp_path/templates"
         wsl_vbox_templates_path="$wsl_default_vm_location\\$vcorp_group\\templates"
         old_protocol=''
         ip_vm=172.20.224.1
-    
-    else
-    
-        # Estem en entorn Linux i MacOS
-        echo "Configurant per entorn Linux i MacOS..."
+
+
+    else 
+
+        # Estem en entorn MacOS o Linux natiu
+        echo "Configurant per entorn Linux natiu o MacOS..."
         vbox="vboxmanage"
         default_vm_location="$HOME/VirtualBox VMs"
         wsl_default_vm_location="$HOME/VirtualBox VMs"
         download_folder="$(mktemp -d)"
         openwrt_vm_path="$default_vm_location/$vcorp_group/templates"
-    
+
         wsl_download_folder="$download_folder"
         open_wrt_file_path="$wsl_download_folder/$openwrt_file"
-    
+
         wsl_openwrt_vm_path="$openwrt_vm_path/$openwrt_vmname"
         vdi_path="$wsl_openwrt_vm_path/openwrt.vdi"
-    
+
         # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
         # vbox_templates_path="$vbox_vcorp_path/templates"
         wsl_vbox_templates_path="$openwrt_vm_path"
         old_protocol='-O'
         ip_vm=localhost
+
     fi
 }
-if grep -q microsoft /proc/version; then
-    is_wsl=1
-fi
 
-if (( is_wsl )); then
-    # Estem en entorn WSL
-    echo "Configurant per entorn WSL"
-    vbox="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
-    default_vm_location="/mnt/c/VirtualCorp"
-    wsl_default_vm_location="C:\\VirtualCorp"
-    download_folder="/mnt/c/TEMP"
-    openwrt_vm_path="$default_vm_location/$vcorp_group/templates/"
-
-    wsl_download_folder="c:\\TEMP"
-    open_wrt_file_path="$wsl_download_folder\\$openwrt_file"
-
-    wsl_openwrt_vm_path="$wsl_default_vm_location\\$vcorp_group\\templates\\$openwrt_vmname"
-    vdi_path="$wsl_openwrt_vm_path\\openwrt.vdi"
-
-    # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
-    # vbox_templates_path="$vbox_vcorp_path/templates"
-    wsl_vbox_templates_path="$wsl_default_vm_location\\$vcorp_group\\templates"
-    old_protocol=''
-    ip_vm=172.20.224.1
-
-
-else 
-
-    # Estem en entorn MacOS o Linux natiu
-    echo "Configurant per entorn MacOS natiu"
-    vbox="vboxmanage"
-    default_vm_location="$HOME/VirtualBox VMs"
-    wsl_default_vm_location="$HOME/VirtualBox VMs"
-    download_folder="$(mktemp -d)"
-    openwrt_vm_path="$default_vm_location/$vcorp_group/templates"
-
-    wsl_download_folder="$download_folder"
-    open_wrt_file_path="$wsl_download_folder/$openwrt_file"
-
-    wsl_openwrt_vm_path="$openwrt_vm_path/$openwrt_vmname"
-    vdi_path="$wsl_openwrt_vm_path/openwrt.vdi"
-
-    # vbox_vcorp_path="$HOME/VirtualBox VMs/VCorp"
-    # vbox_templates_path="$vbox_vcorp_path/templates"
-    wsl_vbox_templates_path="$openwrt_vm_path"
-    old_protocol='-O'
-    ip_vm=localhost
-
-fi
-
-    # si el usuario pasa -i/--iso, usar esa carpeta
-    if [ -n "$iso_dir" ]; then # si la variable no esta vacía
-      if [ ! -d "$iso_dir" ]; then #
-        echo "La carpeta $iso_dir no existe. Creándola..."
-        mkdir -p "$iso_dir" || { echo "No se pudo crear $iso_dir"; exit 1; }
-      fi
-      download_folder="$iso_dir" #entonces usaremos esa carpeta
+custom_iso_dir() {
+    if [ ! -d "$iso_dir" ]; then #
+        echo "ISOs Directory $iso_dir does not exist. Creating..."
+        mkdir -p "$iso_dir" || { echo "Couldn't create $iso_dir"; exit 1; }
     fi
+    download_folder="$iso_dir"
+    echo "ISOs will be managed here: $download_folder"
+}
 
-    ensure_dirs() {
-      mkdir -p "$default_vm_location"
-      "$vbox" setproperty machinefolder "$wsl_default_vm_location"
-    }
+ensure_dirs() {
+    mkdir -p "$default_vm_location"
+    "$vbox" setproperty machinefolder "$wsl_default_vm_location"
+}
 
 create_openwrtvdi() {
 
     rm -f "$download_folder/$openwrt_zipped_file"
     wget -P "$download_folder" $openwrt_url
-    if [[ $(sha256sum $openwrt_vdi_filename | cut -d' ' -f1) != $openwrt_vdi_checksum ]]
+    if [[ $(sha256sum "$download_folder/$openwrt_zipped_file" | cut -d' ' -f1) != "$openwrt_vdi_checksum" ]]
     then
         echo "Bad OpenWRT IMG!"
         exit 1
@@ -220,6 +186,7 @@ configure_openwrt() {
     ssh-keygen -R '[localhost]:2222'
 
     ssh -p 2222 -o StrictHostKeyChecking=no -i "$idkeys_path" root@$ip_vm "
+        echo -e \"nameserver 1.1.1.1\nnameserver 8.8.8.8\" >> /etc/resolv.concho -e \"nameserver 1.1.1.1\nnameserver 8.8.8.8\" >> /etc/resolv.f
         opkg update
         opkg install frr frr-zebra frr-watchfrr frr-staticd frr-ripd openssl-util tcpdump
         sed -i 's/set timeout=.*/set timeout=\"0\"/' /boot/grub/grub.cfg
@@ -267,7 +234,7 @@ create_preseed() {
 #### Contents of the preconfiguration file (for bookworm)
 ### Localization
 # Preseeding only locale sets language, country and locale.
-d-i debian-installer/locale string es_ES
+d-i debian-installer/locale string en_US
 
 # Keyboard selection.
 d-i keyboard-configuration/xkb-keymap select es
@@ -277,6 +244,8 @@ d-i keyboard-configuration/xkb-keymap select es
 # netcfg will choose an interface that has link if possible. This makes it
 # skip displaying a list if there is more than one interface.
 d-i netcfg/choose_interface select auto
+#d-i netcfg/get_nameservers string 1.1.1.1
+#d-i netcfg/confirm_static boolean true
 
 # Any hostname and domain names assigned from dhcp take precedence over
 # values set here. However, setting the values still prevents the questions
@@ -369,8 +338,6 @@ d-i partman/choose_partition select finish
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
 
-
-
 ### Apt setup
 # Choose, if you want to scan additional installation media
 # (default: false).
@@ -386,7 +353,7 @@ d-i apt-setup/cdrom/set-first boolean false
 # this setting).
 #d-i apt-setup/disable-cdrom-entries boolean true
 # Uncomment this if you don't want to use a network mirror.
-#d-i apt-setup/use_mirror boolean false
+d-i apt-setup/use_mirror boolean false
 # Select which update services to use; define the mirrors to be used.
 # Values shown below are the normal defaults.
 #d-i apt-setup/services-select multiselect security, updates
@@ -457,19 +424,26 @@ EOF
 }
 
 
-
-
-
 deb_prepare_iso() {
     # $1 path to decompress debian iso
-    wget -P "$download_folder" "$debian_url"
-    if [[ $(sha256sum "$download_folder/$debian_iso_filename" | cut -d' ' -f1) == "$debian_iso_filename" ]]
+    echo "Checking Debian ISO in local filesystem..."
+    existing_iso=$(find "$download_folder" -name "$debian_iso_filename" 2> /dev/null | head -1)
+    iso_path=$(dirname $existing_iso 2> /dev/null)
+    if [[ -n $iso_path ]]
     then
-        iso_image=$(basename "$debian_url")
-        bsdtar -xf "$download_folder/$iso_image" -C "$1"
+        download_folder=$iso_path
+        echo "ISO found at: $download_folder/$debian_iso_filename"
     else
-        echo "Bad Debian ISO!"
+        download_folder=$(mktemp -d)
     fi
+    
+    [ $iso_path != $'\n' ] || wget -P "$download_folder" "$debian_url"
+    if [[ $(sha256sum "$download_folder/$debian_iso_filename" | cut -d' ' -f1) != "$debian_iso_checksum" ]]
+    then
+        echo "Bad Debian ISO..."
+        exit 1
+    fi
+    [ -d "$download_folder/isolinux" ] || bsdtar -xf "$download_folder/$debian_iso_filename" -C "$download_folder"
 }
 
 deb_create_preseeded_iso() {
@@ -479,19 +453,22 @@ deb_create_preseeded_iso() {
     # $4 list of packages to install
     # $5 path to auth identity file (id_rsa.pub) of sysadmin user
     # $6 path where to save preseeded iso
-
+    echo "Preparing ISO files for preseeding..."
     cp "$5" "$1/authorized_keys"
     create_preseed "$1" $2 $3 $4
     chmod -R +w "$1/isolinux"
-    sed -i 's/---\s*quiet\s*$/locale=es_ES keyboard-configuration\/xkb-keymap=es --- quiet file=\/cdrom\/preseed.cfg /' "$1/isolinux/txt.cfg"
+
+    sed -i 's/---\s*quiet\s*$/locale=en_US keyboard-configuration\/xkb-keymap=es --- quiet file=\/cdrom\/preseed.cfg /' "$1/isolinux/txt.cfg"
     {
         echo "default install"
         echo "timeout 0"
         echo "prompt 0"
     } >>"$1/isolinux/isolinux.cfg"
-    mkisofs -o "$6" -b isolinux/isolinux.bin \
-        -c isolinux/boot.cat -boot-info-table -no-emul-boot -boot-load-size 4 \
+    echo "Creating ISO..."
+    mkisofs -v -o "$6" -b "isolinux/isolinux.bin" \
+        -c "isolinux/boot.cat" -boot-info-table -no-emul-boot -boot-load-size 4 \
         -V "Debian ISO" -R -J "$1"
+    echo "ISO created..."
 }
 
 deb_create_vm() {
@@ -556,10 +533,10 @@ configure_debian_server() {
     ssh-keygen -R '[127.0.0.1]:2222'
     ssh-keygen -R '[localhost]:2222'
 
-    ssh -p 2222 -o StrictHostKeyChecking=no -i "$idkeys_path" $sysadmin_user@$ip_vm <<EOF
+    ssh -tt -p 2222 -o StrictHostKeyChecking=no -i "$idkeys_path" $sysadmin_user@$ip_vm <<EOF
         sudo apt-get update && sudo apt-get upgrade -y
         sudo sed -i 's/GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
-        sudo update-grub
+        sudo update-grubº
 EOF
 
     "$vbox" controlvm "$debian_vmname" acpipowerbutton
@@ -628,13 +605,19 @@ EOF
 }
 
 
-
-
 install_dependencies() {
     if which apt &> /dev/null; then
-        sudo apt-get install -y libarchive-tools mkisofs sshpass
+        sudo dpkg -l libarchive-tools mkisofs sshpass &> /dev/null
+        if [ ! $? ]
+        then
+            sudo apt-get install -y libarchive-tools mkisofs sshpass
+        fi
     elif which pacman &> /dev/null; then
-        sudo pacman -Syu --noconfirm --needed libarchive cdrtools sshpass
+        sudo pacman -Q | grep "libarchive\|cdrtools\|sshpass" &> /dev/null
+        if [ $? ]
+        then
+            sudo pacman -Syu --noconfirm --needed libarchive cdrtools sshpass
+        fi
     else
         echo "Cal instal·lar libarchive-tools (o bsdtar en algunes distribucions) i mkisofs"
         echo ""
@@ -646,8 +629,8 @@ if [ "$1" = "" ]; then
     eval set -- "-rsd"
 fi
 
-args=$(getopt -o rsdhi \
-    --long create-router,create-server,help,create-desktop,iso,debian-url:,openwrt-url: --name "$0" -- "$@")
+args=$(getopt -o rsdhi: \
+    --long create-router,create-server,help,create-desktop,iso:,debian-url:,openwrt-url: --name "$0" -- "$@")
 
 eval set -- "${args}"
 
@@ -661,23 +644,28 @@ while true; do
     opc_create_server=1; shift ;;
     -d|--create-desktop) 
     opc_create_desktop=1; shift ;;
-    -i|--iso)            
+    -i|--iso)
+    echo $2
     iso_dir="$2"; shift 2 ;;
     --debian-url)        
-    debian_url="$2"; shift 2 ;;
+    debian_url="$OPTARG"; shift 2 ;;
     --openwrt-url)       
-    openwrt_url="$2"; shift 2 ;;
+    openwrt_url="$OPTARG"; shift 2 ;;
     --) shift; break ;;
     *) break ;;
   esac
 done
 
+test -z $opc_help && check_platform
+
 mkdir -p "$default_vm_location"
 "$vbox" setproperty machinefolder "$wsl_default_vm_location"
 
-test -v opc_help && show_help || check_platform
+[[ -n $iso_dir ]] && custom_iso_dir
 
-test -v opc_create_router && {
+[[ -n $opc_help ]] && show_help
+
+[[ -n $opc_create_router ]] && {
     install_dependencies
     echo "** Deleting $openwrt_vmname **"
     "$vbox" unregistervm "$openwrt_vmname" --delete 2>/dev/null 
@@ -690,28 +678,30 @@ test -v opc_create_router && {
 }
 
 # Comprovar si existeixen les variables opc_create_desktop o opc_create_server
-if [[ -v opc_create_desktop || -v opc_create_server ]]; then
+if [[ -n $opc_create_desktop || -n $opc_create_server ]]; then
     install_dependencies
     # Executar prepare_iso sempre
-    tmp_folder=$(mktemp -d)
-    deb_prepare_iso "$tmp_folder"
+    deb_prepare_iso
+    tmp_folder=$download_folder
+    echo "Debian ISO found in: $tmp_folder"
 
     # Si existeix opc_create_server, executa create_server
-    if [[ -n opc_create_server ]]; then
+    if [[ -n $opc_create_server ]]; then
         echo ""
         echo "** Deleting $srv_template_vmname **"
-        "$vbox" unregistervm "$srv_template_vmname" --delete 2>/dev/null
+        "$vbox" unregistervm "$srv_template_vmname" --delete
         echo ""
+        "$vbox" list vms
 
-        deb_create_preseeded_iso "$tmp_folder" deb-srv-template multi standard,ssh-server,tcpdump "$idkeys_path.pub" "$download_folder/debian_server_template.iso"
-        deb_create_vm $srv_template_vmname "$wsl_download_folder/debian_server_template.iso"
+        [ -f "$download_folder/debian_server_template.iso" ] || deb_create_preseeded_iso "$tmp_folder" deb-srv-template multi standard,ssh-server,tcpdump "$idkeys_path.pub" "$download_folder/debian_server_template.iso"
+        deb_create_vm $srv_template_vmname "$download_folder/debian_server_template.iso"
         echo "Waiting for $srv_template_vmname to shutdown..."
         sleep 10s
         configure_debian_server
     fi
 
     # Si existeix opc_create_desktop, executa create_desktop
-    if [[ -n opc_create_desktop ]]; then
+    if [[ -n $opc_create_desktop ]]; then
         echo "** Deleting $desktop_template_vmname **"
         "$vbox" unregistervm "$desktop_template_vmname" --delete 2>/dev/null
 
