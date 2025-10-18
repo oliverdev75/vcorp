@@ -15,6 +15,7 @@ idkeys_path="$HOME/.ssh/vcorp_sysadmin"
 sysadmin_user="sysadmin"
 iso_dir=""
 is_wsl=0
+is_darwin=0
 vbox=
 default_vm_location=
 wsl_default_vm_location=
@@ -31,7 +32,7 @@ ip_vm=
 
 check_platform() {
 
-    if grep -q microsoft /proc/version; then
+    if grep -q microsoft /proc/version 2> /dev/null; then
         is_wsl=1
     fi
 
@@ -58,13 +59,15 @@ check_platform() {
 
 
     else 
-
+        if [[ $(uname -s) == "Darwin" ]]; then
+            is_darwin=1
+        fi
         # Estem en entorn MacOS o Linux natiu
         echo "Configurant per entorn Linux natiu o MacOS..."
         vbox="vboxmanage"
         default_vm_location="$HOME/VirtualBox VMs"
         wsl_default_vm_location="$HOME/VirtualBox VMs"
-        download_folder="$(mktemp -d)"
+        download_folder=
         openwrt_vm_path="$default_vm_location/$vcorp_group/templates"
 
         wsl_download_folder="$download_folder"
@@ -97,9 +100,17 @@ ensure_dirs() {
 }
 
 create_openwrtvdi() {
-
-    rm -f "$download_folder/$openwrt_zipped_file"
-    wget -P "$download_folder" $openwrt_url
+        # $1 path to decompress debian iso
+    echo "Checking OpenWRT Image in local filesystem..."
+    existing_img=$(find "$download_folder" -name "$openwrt_zipped_file" -maxdepth 1 2> /dev/null | head -1)
+    img_path=$(dirname $existing_img 2> /dev/null)
+    if [[ -n $img_path ]]
+    then
+        download_folder=$img_path
+        echo "Img found at: $download_folder/$openwrt_zipped_file"
+    fi
+    
+    [[ -n $img_path ]] || wget -P "$download_folder" "$openwrt_url"
     if [[ $(sha256sum "$download_folder/$openwrt_zipped_file" | cut -d' ' -f1) != "$openwrt_vdi_checksum" ]]
     then
         echo "Bad OpenWRT IMG!"
@@ -107,8 +118,13 @@ create_openwrtvdi() {
     fi
     gzip -fd "$download_folder/$openwrt_zipped_file"
 
-    mkdir "$download_folder/openwrtmnt"
-    sudo mount -o loop,offset=17301504 "$download_folder/$openwrt_file" "$download_folder/openwrtmnt"
+    mkdir "$download_folder/openwrtmnt" 2> /dev/null
+    type=ext4
+    if (( is_darwin )); then
+        type=hfsplus
+    fi
+    sudo mount -t $type -o offset=17301504 "$download_folder/$openwrt_file" "$download_folder/openwrtmnt"
+    ls "$download_folder/openwrtmnt"
     config_openwrt_network
     sudo umount "$download_folder/openwrtmnt"
 
@@ -116,7 +132,7 @@ create_openwrtvdi() {
 
     rm -f "$openwrt_vm_path/openwrt.vdi"
 
-    "$vbox" convertfromraw --format VDI "$open_wrt_file_path" "$vdi_path"
+    "$vbox" convertfromraw --format VDI "$download_folder/$openwrt_file" "$vdi_path"
 }
 
 config_openwrt_network() {
@@ -186,7 +202,6 @@ configure_openwrt() {
     ssh-keygen -R '[localhost]:2222'
 
     ssh -p 2222 -o StrictHostKeyChecking=no -i "$idkeys_path" root@$ip_vm "
-        echo -e \"nameserver 1.1.1.1\nnameserver 8.8.8.8\" >> /etc/resolv.concho -e \"nameserver 1.1.1.1\nnameserver 8.8.8.8\" >> /etc/resolv.f
         opkg update
         opkg install frr frr-zebra frr-watchfrr frr-staticd frr-ripd openssl-util tcpdump
         sed -i 's/set timeout=.*/set timeout=\"0\"/' /boot/grub/grub.cfg
@@ -218,6 +233,7 @@ create_openwrtvm() {
     "$vbox" storageattach "$openwrt_vmname" --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "$vdi_path"
     "$vbox" modifyvm "$openwrt_vmname" --nic1 nat --natpf1 "ssh,tcp,,2222,,22"
     "$vbox" modifyvm "$openwrt_vmname" --nic2 intnet --nic3 intnet --nic4 intnet --nic5 intnet --nic6 intnet
+    "$vbox" modifyvm "$openwrt_vmname" --natdnshostresolver1 on
 
     echo -e "\033[1;33m [$0] Creació openwrt finalitzada. \033[0m"
 }
@@ -353,7 +369,7 @@ d-i apt-setup/cdrom/set-first boolean false
 # this setting).
 #d-i apt-setup/disable-cdrom-entries boolean true
 # Uncomment this if you don't want to use a network mirror.
-d-i apt-setup/use_mirror boolean false
+#d-i apt-setup/use_mirror boolean false
 # Select which update services to use; define the mirrors to be used.
 # Values shown below are the normal defaults.
 #d-i apt-setup/services-select multiselect security, updates
@@ -427,17 +443,15 @@ EOF
 deb_prepare_iso() {
     # $1 path to decompress debian iso
     echo "Checking Debian ISO in local filesystem..."
-    existing_iso=$(find "$download_folder" -name "$debian_iso_filename" 2> /dev/null | head -1)
+    existing_iso=$(find "$download_folder" -name "$debian_iso_filename" -maxdepth 1 2> /dev/null | head -1)
     iso_path=$(dirname $existing_iso 2> /dev/null)
     if [[ -n $iso_path ]]
     then
         download_folder=$iso_path
         echo "ISO found at: $download_folder/$debian_iso_filename"
-    else
-        download_folder=$(mktemp -d)
     fi
-    
-    [ $iso_path != $'\n' ] || wget -P "$download_folder" "$debian_url"
+
+    [[ -n $iso_path ]] || wget -P "$download_folder" "$debian_url"
     if [[ $(sha256sum "$download_folder/$debian_iso_filename" | cut -d' ' -f1) != "$debian_iso_checksum" ]]
     then
         echo "Bad Debian ISO..."
@@ -485,6 +499,7 @@ deb_create_vm() {
     "$vbox" storageattach "$1" --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "$wsl_vbox_templates_path/$1/$1.vdi"
     "$vbox" storagectl "$1" --name "IDE Controller" --add ide
     "$vbox" storageattach "$1" --storagectl "IDE Controller" --port 0 --device 0 --type dvddrive --medium "$2"
+    "$vbox" modifyvm "$1" --natdnshostresolver1 on
 
     "$vbox" startvm "$1"
 
@@ -556,6 +571,7 @@ create_debian_desktop() {
 
     "$vbox" clonevm "$1" --groups "/$vcorp_group/templates" --name "$debian_vmname" --register --snapshot base --options=Link
     "$vbox" modifyvm "$debian_vmname" --groups "/$vcorp_group/templates" 
+    "$vbox" modifyvm "$debian_vmname" --natdnshostresolver1 on
 
     "$vbox" startvm "$debian_vmname"
     echo "Waiting for $debian_vmname to boot..."
@@ -629,7 +645,7 @@ if [ "$1" = "" ]; then
     eval set -- "-rsd"
 fi
 
-args=$(getopt -o rsdhi: \
+args=$(getopt -o rsdhi:R:D: \
     --long create-router,create-server,help,create-desktop,iso:,debian-url:,openwrt-url: --name "$0" -- "$@")
 
 eval set -- "${args}"
@@ -645,12 +661,11 @@ while true; do
     -d|--create-desktop) 
     opc_create_desktop=1; shift ;;
     -i|--iso)
-    echo $2
     iso_dir="$2"; shift 2 ;;
-    --debian-url)        
-    debian_url="$OPTARG"; shift 2 ;;
+    --debian-url)
+    debian_url="$2"; shift 2 ;;
     --openwrt-url)       
-    openwrt_url="$OPTARG"; shift 2 ;;
+    openwrt_url="$2"; shift 2 ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -661,7 +676,13 @@ test -z $opc_help && check_platform
 mkdir -p "$default_vm_location"
 "$vbox" setproperty machinefolder "$wsl_default_vm_location"
 
-[[ -n $iso_dir ]] && custom_iso_dir
+if [[ -n $iso_dir ]]; then
+    custom_iso_dir
+else
+    if ! (( is_wsl )); then
+        download_folder=$(mktemp -d)
+    fi
+fi
 
 [[ -n $opc_help ]] && show_help
 
