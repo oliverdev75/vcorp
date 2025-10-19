@@ -202,6 +202,7 @@ configure_openwrt() {
     ssh-keygen -R '[localhost]:2222'
 
     ssh -p 2222 -o StrictHostKeyChecking=no -i "$idkeys_path" root@$ip_vm "
+        echo "nameserver 8.8.8.8" >> /etc/resolv.conf
         opkg update
         opkg install frr frr-zebra frr-watchfrr frr-staticd frr-ripd openssl-util tcpdump
         sed -i 's/set timeout=.*/set timeout=\"0\"/' /boot/grub/grub.cfg
@@ -229,6 +230,8 @@ create_openwrtvm() {
 
     "$vbox" createvm --name "$openwrt_vmname" --register --ostype "Linux_64" --groups "/$vcorp_group/templates"
     "$vbox" modifyvm "$openwrt_vmname" --memory 128
+    "$vbox" modifyvm "$openwrt_vmname" --graphicscontroller VMSVGA
+    "$vbox" modifyvm "$openwrt_vmname" --vram 32
     "$vbox" storagectl "$openwrt_vmname" --name "SATA Controller" --add sata --controller IntelAhci --portcount 2
     "$vbox" storageattach "$openwrt_vmname" --storagectl "SATA Controller" --port 0 --device 0 --type hdd --medium "$vdi_path"
     "$vbox" modifyvm "$openwrt_vmname" --nic1 nat --natpf1 "ssh,tcp,,2222,,22"
@@ -255,7 +258,7 @@ d-i debian-installer/locale string en_US
 # Keyboard selection.
 d-i keyboard-configuration/xkb-keymap select es
 # d-i keyboard-configuration/toggle select No toggling
-
+kex_exchange_identification: read: Connection reset by peer
 ### Network configuration
 # netcfg will choose an interface that has link if possible. This makes it
 # skip displaying a list if there is more than one interface.
@@ -493,6 +496,8 @@ deb_create_vm() {
 
     "$vbox" createvm --name "$1" --ostype "Debian_64" --register --groups "/$vcorp_group/templates"
     "$vbox" modifyvm "$1" --memory 1024 --cpus 1
+    "$vbox" modifyvm "$1" --graphicscontroller VMSVGA
+    "$vbox" modifyvm "$1" --vram 32
     "$vbox" modifyvm "$1"  --nic1 nat --natpf1 "ssh,tcp,,2222,,22"
     "$vbox" createhd --filename "$wsl_vbox_templates_path/$1/$1.vdi" --size 50000
     "$vbox" storagectl "$1" --name "SATA Controller" --add sata --controller IntelAhci --portcount 2
@@ -571,6 +576,8 @@ create_debian_desktop() {
 
     "$vbox" clonevm "$1" --groups "/$vcorp_group/templates" --name "$debian_vmname" --register --snapshot base --options=Link
     "$vbox" modifyvm "$debian_vmname" --groups "/$vcorp_group/templates" 
+    "$vbox" modifyvm "$debian_vmname" --graphicscontroller VMSVGA
+    "$vbox" modifyvm "$debian_vmname" --vram 128
     "$vbox" modifyvm "$debian_vmname" --natdnshostresolver1 on
 
     "$vbox" startvm "$debian_vmname"
